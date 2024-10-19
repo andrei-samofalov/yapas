@@ -1,13 +1,40 @@
-from typing import Any, Awaitable, MutableMapping, Callable, Protocol, runtime_checkable
+from typing import Any, Awaitable, MutableMapping, Callable, Protocol, runtime_checkable, \
+    NamedTuple, Optional
 
 EMPTY_BYTES = b""
 SPACE_BYTES = b'\r\n'
 EOF_BYTES = (EMPTY_BYTES, SPACE_BYTES)
 
+
+def _getitem(self, item, default=None):
+    try:
+        return self.__getattribute__(item)
+    except AttributeError:
+        return default
+
+
+class Message(NamedTuple):
+    """A NamedTuple with getattr impl that represents a message."""
+
+    type: str
+    body: Optional[bytes] = None
+    more_body: bool = False
+    status: Optional[int] = 200
+    headers: Optional[list[tuple[bytes, bytes]]] = None
+
+    __getitem__ = _getitem
+    get = _getitem
+
+    @classmethod
+    def fromkeys(cls, **kwargs):
+        """Create a Message instance from kwargs."""
+        return cls(**kwargs)
+
+
 Scope = MutableMapping[str, Any]
-Message = MutableMapping[str, Any]
+ASGIMessage = MutableMapping[str, Any]
 Receive = Callable[[], Awaitable[Message]]
-Send = Callable[[Message], Awaitable[None]]
+Send = Callable[[Message | ASGIMessage], Awaitable[None]]
 
 
 @runtime_checkable

@@ -12,9 +12,13 @@ from yapas.conf.constants import WORKING_DIR
 from yapas.core import static, exceptions
 from yapas.core.signals import kill_event, handle_shutdown, handle_restart
 from yapas.core.types import (
-    Application, Message, Scope,
+    Application,
+    AppFactory,
+    ASGIMessage,
+    Message,
+    Scope,
     EOF_BYTES,
-    AppFactory, SPACE_BYTES
+    SPACE_BYTES,
 )
 
 
@@ -119,35 +123,34 @@ class Server:
                 raw_data += b'\r\n'
                 raw_data += await reader.read()
 
-            return {"type": "http.request", "body": raw_data, "more_body": False}
+            return Message(type="http.request", body=raw_data)
 
-        async def _send(message: Message) -> None:
-            await self.write_msg(writer, message)
+        async def _send(message: ASGIMessage) -> None:
+            await self.write_msg(writer, Message.fromkeys(**message))
 
         await self._app(scope, _receive, _send)
 
     async def write_msg(self, writer: StreamWriter, message: Message):
         """Write the message to the response"""
-        if not "type" in message or 'http.response' not in message["type"]:
+        if not message.type or 'http.response' not in message.type:
             raise RuntimeError
 
         self._log.debug(f'received message: {message}')
-        event = message["type"]
+        event = message.type
         if 'start' in event:
-            writer.write(b'HTTP/1.1 %d %s\r\n' % (message['status'], message.get('reason', b'')))
+            writer.write(b'HTTP/1.1 %d %s\r\n' % (message.status, message.get('reason', b'')))
 
-            for header in message['headers']:
-                header: list[bytes]
+            for header in message.headers:
                 writer.write(b': '.join(header))
                 writer.write(SPACE_BYTES)
             writer.write(SPACE_BYTES)
             await writer.drain()
 
-        if 'body' in message:
-            writer.write(message['body'])
+        if message.body:
+            writer.write(message.body)
             await writer.drain()
 
-            if 'more_body' not in message:
+            if not message.more_body:
                 writer.close()
                 await writer.wait_closed()
 

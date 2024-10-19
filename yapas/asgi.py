@@ -6,7 +6,7 @@ app = FastAPI()
 
 @app.get('/hello')
 async def hello_world():
-    return 'Hello World!'
+    return {'message': 'Hello World!'}
 
 
 @app.get('/restart')
