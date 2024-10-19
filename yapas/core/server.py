@@ -4,7 +4,7 @@ import pathlib
 from logging import getLogger
 from typing import Optional
 
-from core.dispatcher import Dispatcher
+from yapas.core.dispatcher import Dispatcher
 
 kill_event = asyncio.Event()
 

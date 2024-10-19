@@ -1,9 +1,9 @@
 import json
 from http import HTTPStatus
 
-from core.dispatcher import Router
-from core.request import Request
-from core.response import Response
+from yapas.core.dispatcher import Router
+from yapas.core.request import Request
+from yapas.core.response import Response
 
 
 class TestRoute(Router):

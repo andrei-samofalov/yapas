@@ -5,9 +5,9 @@ from http import HTTPMethod, HTTPStatus
 from typing import Optional
 from urllib.parse import ParseResult
 
-from core.exceptions import MethodNotAllowed, NotFoundError, ImproperlyConfigured, HTTPException
-from core.request import make_request, Request
-from core.response import Response
+from yapas.core.exceptions import MethodNotAllowed, NotFoundError, ImproperlyConfigured, HTTPException
+from yapas.core.request import make_request, Request
+from yapas.core.response import Response
 
 EMPTY_BYTES = b""
 SPACE_BYTES = b'\r\n'
