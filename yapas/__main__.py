@@ -53,7 +53,7 @@ if __name__ == '__main__':
                         type=str, help='IP address of the server')
     parser.add_argument('--port', default=8079,
                         type=int, help='Port of the server')
-    parser.add_argument('--static_path', default=None,
+    parser.add_argument('--static_path', default='./static',
                         type=str, help='Path to the static folder')
     parser.add_argument('--log_level', default='debug',
                         choices=['debug', 'info', 'warning', 'error'],

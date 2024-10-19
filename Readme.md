@@ -76,9 +76,9 @@ You can serve static files by providing the `--static_path` argument.
 
 #### Static Content Management
 
-* **Custom Error Pages**: Provide support for customizable error pages for common HTTP statuses
+* ✅ **Custom Error Pages**: Provide support for customizable error pages for common HTTP statuses
   such as 404 Not Found and 500 Internal Server Error.
-* **Basic Caching**: Implement basic in-memory caching for static content to reduce load times
+* ✅ **Basic Caching**: Implement basic in-memory caching for static content to reduce load times
   for frequently accessed files by caching them for a configurable amount of time.
 
 #### Logging and Error Handling

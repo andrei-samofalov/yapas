@@ -5,7 +5,7 @@ from http import HTTPMethod, HTTPStatus
 from typing import Optional
 from urllib.parse import ParseResult
 
-from yapas.core import exceptions
+from yapas.core import exceptions, static
 from yapas.core.exceptions import ImproperlyConfigured
 from yapas.core.request import make_request, Request
 from yapas.core.response import Response
@@ -154,7 +154,10 @@ class Dispatcher:
             return await self._unhandled(exc)
 
         self._log.warning(f"{exc.args[0]}: {exc.status} {exc.status.name}")
-        return Response(status=exc.status)
+        body = ''
+        if exc.status in [HTTPStatus.INTERNAL_SERVER_ERROR, HTTPStatus.NOT_FOUND]:
+            body = await static.render_base(error_msg=exc.status.name)
+        return Response(status=exc.status, body=body)
 
     async def _unhandled(self, exc: Exception) -> Response:
         self._log.exception(exc)
