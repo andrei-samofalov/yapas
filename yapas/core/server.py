@@ -3,20 +3,21 @@ import logging
 import pathlib
 import signal
 from logging import getLogger
-from typing import Optional
+from typing import Optional, Callable, Awaitable
 
-from yapas.core.dispatcher import Dispatcher
 from yapas.core.signals import kill_event, handle_shutdown, handle_restart
+
+ConnectionCallable = Callable[[asyncio.StreamReader, asyncio.StreamWriter], Awaitable[None]]
 
 
 class Server:
     """Async Server implementation."""
 
-    def __init__(self, host: str, port: int, dispatcher: Dispatcher) -> None:
+    def __init__(self, host: str, port: int, client_connection_cb: ConnectionCallable) -> None:
         self._host = host
         self._port = port
 
-        self._dispatcher = dispatcher
+        self._client_connection_cb = client_connection_cb
         self._static_path: Optional[str | pathlib.Path] = None
 
         self._log: logging.Logger = getLogger('yapas.server')
@@ -36,7 +37,7 @@ class Server:
     async def _create_server(self):
         """Create and return asyncio Server without starting it."""
         return await asyncio.start_server(
-            self._dispatcher.root_handler,
+            self._client_connection_cb,
             self._host,
             self._port,
             start_serving=False,

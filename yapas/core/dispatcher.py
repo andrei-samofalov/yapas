@@ -6,6 +6,7 @@ from typing import Optional
 from urllib.parse import ParseResult
 
 from yapas.core import exceptions
+from yapas.core.exceptions import ImproperlyConfigured
 from yapas.core.request import make_request, Request
 from yapas.core.response import Response
 
@@ -17,16 +18,17 @@ EOF_STRINGS = (EMPTY_BYTES, SPACE_BYTES)
 class Router:
     """Simple router implementation"""
 
-    def __init__(self, dispatcher: Optional["Dispatcher"] = None) -> None:
-        self._dispatcher = dispatcher
+    def __init__(self) -> None:
         self._path: Optional[str] = None
         self._parent: Optional["Router"] = None
         self._children: list['Router'] = []
 
     def register_router(self, path: str, router: "Router") -> None:
         """Register router as a child router"""
-        executor = self._dispatcher or self._parent
-        executor.register_router(path, router)
+        if not self._parent:
+            raise ImproperlyConfigured('You must register a root router')
+
+        self._parent.register_router(path, router)
         self._children.append(router)
         router.register(self, path)
 

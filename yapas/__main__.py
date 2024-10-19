@@ -25,7 +25,8 @@ async def main(
     conf.setup_logging(log_level.upper())
 
     dispatcher = Dispatcher()
-    root = Router(dispatcher)
+    root = Router()
+    dispatcher.register_root(root)
 
     first_route = TestRoute()
     second_route = SecondTestRoute()
@@ -37,11 +38,9 @@ async def main(
     root.register_router('/restart', restart_route)  # sending SIGHUP signal
     # root.register_router('/test', third_route)  # test exception on startup
 
-    dispatcher.register_root(root)
-
     await dispatcher.perform_checks()
 
-    server = Server(host=host, port=port, dispatcher=dispatcher)
+    server = Server(host=host, port=port, client_connection_cb=dispatcher.root_handler)
     if static_path:
         server.add_static_path(static_path)
 
