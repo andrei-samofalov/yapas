@@ -96,8 +96,7 @@ class Dispatcher:
 
         await self._write_response(writer, response)
 
-    @classmethod
-    async def _initialize_request(cls, reader: StreamReader):
+    async def _initialize_request(self, reader: StreamReader):
         """Initialize request: parse protocol, path, method, headers and data,
         create and return a Request object."""
 
@@ -105,8 +104,12 @@ class Dispatcher:
             return
 
         method, path, protocol = first_line.decode().strip().split(' ')
-        raw_data = bytearray()
 
+        # we don't want to read request we can not handle
+        if path not in self._routes:
+            raise exceptions.NotFoundError(path)
+
+        raw_data = bytearray()
         async for data in reader:
             if data in EOF_STRINGS:
                 reader.feed_eof()
