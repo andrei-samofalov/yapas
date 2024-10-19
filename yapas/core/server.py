@@ -1,12 +1,12 @@
 import asyncio
 import logging
 import pathlib
+import signal
 from logging import getLogger
 from typing import Optional
 
 from yapas.core.dispatcher import Dispatcher
-
-kill_event = asyncio.Event()
+from yapas.core.signals import kill_event, handle_shutdown, handle_restart
 
 
 class Server:
@@ -19,7 +19,8 @@ class Server:
         self._dispatcher = dispatcher
         self._static_path: Optional[str | pathlib.Path] = None
 
-        self._log: logging.Logger = getLogger('async-server')
+        self._log: logging.Logger = getLogger('yapas.server')
+        self._server: Optional[asyncio.Server] = None
 
     def add_static_path(self, path: str | pathlib.Path) -> None:
         """Add static path to serve from"""
@@ -41,10 +42,36 @@ class Server:
             start_serving=False,
         )
 
+    async def _start(self):
+        if self._server is not None:
+            await self.shutdown()
+            self._log.info(f'Restarting...')
+
+        self._server = await self._create_server()
+        self._log.info(f'Starting TCP server on {self._host}:{self._port}')
+        await self._server.start_serving()
+
+    async def _create_listeners(self):
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(
+                sig,
+                lambda s=sig: asyncio.create_task(
+                    handle_shutdown(s.name, self)
+                ),
+            )
+        loop.add_signal_handler(
+            signal.SIGHUP,
+            lambda: asyncio.create_task(handle_restart(self)),
+        )
+
     async def start(self) -> None:
         """Start the server and wait for the kill event."""
-        server = await self._create_server()
-        self._log.info(f'Starting TCP server on {self._host}:{self._port}')
-
-        await server.start_serving()
+        await self._start()
+        await self._create_listeners()
         await kill_event.wait()
+
+    async def shutdown(self) -> None:
+        """Gracefully shutdown the server."""
+        self._server.close()
+        self._log.info('Server closed')

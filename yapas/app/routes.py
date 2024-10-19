@@ -1,5 +1,6 @@
 import json
 from http import HTTPStatus
+import signal
 
 from yapas.core.dispatcher import Router
 from yapas.core.request import Request
@@ -37,4 +38,14 @@ class SecondTestRoute(Router):
             status=HTTPStatus.OK,
             headers={},
             body=f'You are not prepared!',
+        )
+
+
+class RestartRoute(Router):
+    async def get(self, request: Request) -> Response:
+        signal.raise_signal(signal.SIGHUP)
+        return Response(
+            status=HTTPStatus.OK,
+            headers={},
+            body=f'Restarting...!',
         )

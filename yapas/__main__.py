@@ -3,7 +3,7 @@ import asyncio
 from typing import NoReturn, Optional
 
 from yapas import conf
-from yapas.app.routes import TestRoute, SecondTestRoute
+from yapas.app.routes import TestRoute, SecondTestRoute, RestartRoute
 from yapas.core.dispatcher import Dispatcher, Router
 from yapas.core.server import Server, kill_event
 
@@ -30,9 +30,11 @@ async def main(
     first_route = TestRoute()
     second_route = SecondTestRoute()
     # third_route = TestRoute()
+    restart_route = RestartRoute()
 
     root.register_router('/testme', first_route)  # get/post
     root.register_router('/test', second_route)  # internal server error
+    root.register_router('/restart', restart_route)  # sending SIGHUP signal
     # root.register_router('/test', third_route)  # test exception on startup
 
     dispatcher.register_root(root)
