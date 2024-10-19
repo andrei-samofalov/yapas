@@ -1,15 +1,20 @@
 import argparse
 import asyncio
+import importlib
+from pathlib import Path
 from typing import NoReturn, Optional
 
+from app.routes import TestRoute, SecondTestRoute, RestartRoute
 from yapas import Dispatcher, Router, Server
 from yapas import conf
-from yapas.app.routes import TestRoute, SecondTestRoute, RestartRoute
 from yapas.core.signals import kill_event
+
+local = False
 
 
 async def main(
     *,
+    app: str,
     host: str = '0.0.0.0',
     port: int = 8079,
     static_path: Optional[str] = None,
@@ -17,11 +22,29 @@ async def main(
 ) -> NoReturn:
     """Start async server with configured params:
 
+    :param app: application import path
     :param host: IP address of the server
     :param port: Port of the server
     :param static_path: Path to the static folder
     :param log_level: Logging level
     """
+
+    try:
+
+        curr_path = Path(__file__).parent.name
+        path, app_name = app.split(":")
+        if local:
+            app_path = f"{curr_path}/{path.replace('.', '/')}"
+        else:
+            app_path = path.replace('.', '/')
+        str_path = str(app_path).replace('/', '.')
+        module = importlib.import_module(str_path)
+        app = getattr(module, app_name)
+
+    except (AttributeError, ModuleNotFoundError, ImportError) as exc:
+        print(exc)
+        exit("app cannot be found")
+
     conf.setup_logging(log_level.upper())
 
     dispatcher = Dispatcher()
@@ -40,7 +63,7 @@ async def main(
 
     await dispatcher.perform_checks()
 
-    server = Server(host=host, port=port, client_connection_cb=dispatcher.root_handler)
+    server = Server(host=host, port=port, app=app)
     if static_path:
         server.add_static_path(static_path)
 
@@ -49,6 +72,11 @@ async def main(
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('--app', default='yapas.asgi:app',
+                        type=str,
+                        help='An application or an application factory. '
+                             'Should be passed if following format: '
+                             '<path/to/module>:<app_object>')
     parser.add_argument('--host', default='0.0.0.0',
                         type=str, help='IP address of the server')
     parser.add_argument('--port', default=8079,
