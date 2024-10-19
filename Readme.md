@@ -71,7 +71,7 @@ You can serve static files by providing the `--static_path` argument.
 
 #### Configuration and Customization
 
-* **Signal Handling**: Implement proper signal handling to gracefully terminate (`SIGTERM`)
+* ✅ **Signal Handling**: Implement proper signal handling to gracefully terminate (`SIGTERM`)
   or restart (`SIGHUP`) the server when required.
 
 #### Static Content Management

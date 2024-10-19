@@ -7,8 +7,8 @@ JsonStr = str
 class Response(NamedTuple):
     """Response implementation"""
     status: HTTPStatus
-    headers: dict
-    body: JsonStr
+    headers: dict = {}
+    body: JsonStr = ""
 
     def status_bytes(self):
         """Return a bytes representation of the status."""

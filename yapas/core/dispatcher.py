@@ -5,12 +5,13 @@ from http import HTTPMethod, HTTPStatus
 from typing import Optional
 from urllib.parse import ParseResult
 
-from yapas.core.exceptions import MethodNotAllowed, NotFoundError, ImproperlyConfigured, HTTPException
+from yapas.core import exceptions
 from yapas.core.request import make_request, Request
 from yapas.core.response import Response
 
 EMPTY_BYTES = b""
 SPACE_BYTES = b'\r\n'
+EOF_STRINGS = (EMPTY_BYTES, SPACE_BYTES)
 
 
 class Router:
@@ -53,10 +54,10 @@ class Router:
         """Dispatch request to handler"""
         router = self.search_router(request.url)
         if not router:
-            raise NotFoundError(request.url.path)
+            raise exceptions.NotFoundError(request.url.path)
 
         if not router.can_handle(request.method):
-            raise MethodNotAllowed(request.method.name)
+            raise exceptions.MethodNotAllowed(request.method.name)
 
         handler = getattr(router, request.method.lower())
         return await handler(request)
@@ -74,7 +75,7 @@ class Dispatcher:
     def register_router(self, path: str, router: "Router"):
         """Register a router to route mapping"""
         if path in self._routes:
-            raise ImproperlyConfigured(f"{path} is already registered")
+            raise exceptions.ImproperlyConfigured(f"{path} is already registered")
 
         self._routes[path] = router
 
@@ -95,11 +96,16 @@ class Dispatcher:
         await self._write_response(writer, response)
 
     async def _initialize_request(self, reader: StreamReader):
-        method, path, protocol = (await reader.readline()).decode().strip().split(' ')
+        first_line = await reader.readline()
+        try:
+            method, path, protocol = first_line.decode().strip().split(' ')
+        except ValueError as e:
+            return self._log.error(f"{e}: {first_line}")
+
         raw_data = bytearray()
 
         async for data in reader:
-            if data in [EMPTY_BYTES, SPACE_BYTES]:
+            if data in EOF_STRINGS:
                 reader.feed_eof()
                 break
             raw_data += data
@@ -136,24 +142,17 @@ class Dispatcher:
             return await self._handle_exception(exception)
 
     async def _handle_exception(self, exc: Exception) -> Response:
-        if not isinstance(exc, HTTPException):
+        if not isinstance(exc, exceptions.HTTPException):
             return await self._unhandled(exc)
+
         self._log.warning(f"{exc.args[0]}: {exc.status} {exc.status.name}")
-        return Response(
-            status=exc.status,
-            headers={},
-            body="",
-        )
+        return Response(status=exc.status)
 
     async def _unhandled(self, exc: Exception) -> Response:
         self._log.exception(exc)
-        return Response(
-            status=HTTPStatus.INTERNAL_SERVER_ERROR,
-            headers={},
-            body=''
-        )
+        return Response(status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
     async def perform_checks(self):
         """Perform checks on the startup"""
         if not self.root_router:
-            raise ImproperlyConfigured("You must register the root router")
+            raise exceptions.ImproperlyConfigured("You must register the root router")
