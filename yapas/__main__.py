@@ -2,10 +2,10 @@ import argparse
 import asyncio
 from typing import NoReturn, Optional
 
+from yapas import Dispatcher, Router, Server
 from yapas import conf
 from yapas.app.routes import TestRoute, SecondTestRoute, RestartRoute
-from yapas.core.dispatcher import Dispatcher, Router
-from yapas.core.server import Server, kill_event
+from yapas.core.signals import kill_event
 
 
 async def main(
