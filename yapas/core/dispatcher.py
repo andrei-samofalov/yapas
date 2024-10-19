@@ -88,20 +88,23 @@ class Dispatcher:
         """Root handler for all requests"""
 
         try:
-            request = await self._initialize_request(reader)
+            if (request := await self._initialize_request(reader)) is None:
+                return
             response = await self._dispatch(request)
         except Exception as e:
             response = await self._handle_exception(e)
 
         await self._write_response(writer, response)
 
-    async def _initialize_request(self, reader: StreamReader):
-        first_line = await reader.readline()
-        try:
-            method, path, protocol = first_line.decode().strip().split(' ')
-        except ValueError as e:
-            return self._log.error(f"{e}: {first_line}")
+    @classmethod
+    async def _initialize_request(cls, reader: StreamReader):
+        """Initialize request: parse protocol, path, method, headers and data,
+        create and return a Request object."""
 
+        if (first_line := await reader.readline()) in EOF_STRINGS:
+            return
+
+        method, path, protocol = first_line.decode().strip().split(' ')
         raw_data = bytearray()
 
         async for data in reader:
@@ -117,7 +120,8 @@ class Dispatcher:
         url = urlparse.urlparse(path)
         return make_request(method, url, raw_data)
 
-    async def _write_response(self, writer: StreamWriter, response: Response):
+    @classmethod
+    async def _write_response(cls, writer: StreamWriter, response: Response):
         """Write the Response to the Transport buffer and drain it."""
 
         writer.write(response.status_bytes())  # HTTP/1.1 200 OK
@@ -132,7 +136,6 @@ class Dispatcher:
         await writer.drain()
         writer.close()
         await writer.wait_closed()
-        self._log.debug('response was written')
 
     async def _dispatch(self, request: Request) -> Response:
         """Handle request"""
