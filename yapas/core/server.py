@@ -8,6 +8,8 @@ from asyncio import StreamReader, StreamWriter
 from logging import getLogger
 from typing import Optional
 
+from yapas.conf.constants import WORKING_DIR
+from yapas.core import static, exceptions
 from yapas.core.signals import kill_event, handle_shutdown, handle_restart
 from yapas.core.types import (
     Application, Message, Scope,
@@ -23,12 +25,15 @@ class Server:
         self._host = host
         self._port = port
 
+        self._root = '/'
+
         if inspect.isfunction(app):
             # this can be if app object is a factory
             app = app()
 
         self._app = app
-        self._static_path: Optional[str | pathlib.Path] = None
+        self._static_prefix = '/static'
+        self._static_path: Optional[str | pathlib.Path] = WORKING_DIR / self._static_prefix
 
         self._log: logging.Logger = getLogger('yapas.server')
         self._server: Optional[asyncio.Server] = None
@@ -36,13 +41,14 @@ class Server:
     def add_static_path(self, path: str | pathlib.Path) -> None:
         """Add static path to serve from"""
         # validation
+        posix_path = path
         if isinstance(path, str):
-            path = pathlib.Path(path)
+            posix_path = path if path.startswith('/') else WORKING_DIR / path
 
-        if not path.exists():
-            path.mkdir(parents=True)
+        if not posix_path.exists():
+            posix_path.mkdir(parents=True)
 
-        self._static_path = path
+        self._static_path = str(posix_path)
 
     async def _create_server(self):
         """Create and return asyncio Server without starting it."""
@@ -73,12 +79,13 @@ class Server:
             )
         loop.add_signal_handler(
             signal.SIGHUP,
-            lambda: asyncio.create_task(handle_restart(self)),
+            lambda _: asyncio.create_task(handle_restart(self)),
         )
 
-    async def dispatch(self, reader: StreamReader, writer: StreamWriter):
+    async def dispatch(self, reader: StreamReader, writer: StreamWriter) -> None:
+        """Dispatch an incoming request"""
         if (first_line := await reader.readline()) in EOF_BYTES:
-            return {'type': 'unhandled'}
+            return
 
         scope: Scope = {'type': "http"}
         method, path, protocol = first_line.decode().strip().split(' ')
@@ -88,6 +95,12 @@ class Server:
         scope['path'] = url.path
         scope['root_path'] = url.hostname
         scope['query_string'] = url.query
+
+        if url.path == self._root:
+            return await self.serve_files(writer, '/static/templates/index.html')
+
+        if url.path.startswith(self._static_prefix):
+            return await self.serve_files(writer, url.path)
 
         headers = []
         async for data in reader:
@@ -137,6 +150,35 @@ class Server:
             if 'more_body' not in message:
                 writer.close()
                 await writer.wait_closed()
+
+    async def serve_files(self, writer: StreamWriter, path: str | pathlib.Path) -> None:
+        """Serve files from static path"""
+        # this is awful
+        path = f"{self._static_path}{path.replace(self._static_prefix, "")}"
+        error = None
+        if not pathlib.Path(path).exists():
+            error = exceptions.NotFoundError()
+        else:
+            try:
+                async with static.async_open(path, mode='rb') as f:
+                    data = f.read()
+            except Exception as e:
+                self._log.exception(e)
+                error = exceptions.InternalServerError()
+
+        if error:
+            writer.write(error.as_bytes())
+            writer.write(SPACE_BYTES)  # <- instead of headers
+            writer.write(SPACE_BYTES)
+        else:
+            writer.write(b'HTTP/1.1 200 OK')
+            writer.write(SPACE_BYTES)  # <- instead of headers
+            writer.write(SPACE_BYTES)
+            writer.write(data)
+
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
 
     async def start(self) -> None:
         """Start the server and wait for the kill event."""

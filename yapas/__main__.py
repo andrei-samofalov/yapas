@@ -1,15 +1,15 @@
 import argparse
 import asyncio
 import importlib
-from pathlib import Path
 from typing import NoReturn, Optional
 
 from app.routes import TestRoute, SecondTestRoute, RestartRoute
 from yapas import Dispatcher, Router, Server
 from yapas import conf
+from yapas.conf.constants import WORKING_DIR
 from yapas.core.signals import kill_event
 
-local = False
+local = True
 
 
 async def main(
@@ -30,11 +30,9 @@ async def main(
     """
 
     try:
-
-        curr_path = Path(__file__).parent.name
         path, app_name = app.split(":")
-        if local:
-            app_path = f"{curr_path}/{path.replace('.', '/')}"
+        if not local:
+            app_path = f"{WORKING_DIR}/{path.replace('.', '/')}"
         else:
             app_path = path.replace('.', '/')
         str_path = str(app_path).replace('/', '.')
@@ -81,7 +79,7 @@ if __name__ == '__main__':
                         type=str, help='IP address of the server')
     parser.add_argument('--port', default=8079,
                         type=int, help='Port of the server')
-    parser.add_argument('--static_path', default='./static',
+    parser.add_argument('--static_path', default='static',
                         type=str, help='Path to the static folder')
     parser.add_argument('--log_level', default='debug',
                         choices=['debug', 'info', 'warning', 'error'],

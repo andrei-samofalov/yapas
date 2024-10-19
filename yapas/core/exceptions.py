@@ -13,11 +13,12 @@ class HTTPException(DispatchException):
     """HTTP Exception"""
     status: HTTPStatus
 
-    def __bytes__(self):
+    def as_bytes(self):
+        """Return a bytes representation of the exception"""
         if not self.status:
             return b''
         return (
-            b'HTTP/1.1 %d %s\r\n\r\n' % (self.status.value, self.status.name.encode())
+            b'HTTP/1.1 %d %s\r\n' % (self.status.value, self.status.name.encode())
         )
 
 
@@ -34,3 +35,8 @@ class BadRequest(HTTPException):
 class NotFoundError(HTTPException):
     """Not Found"""
     status = HTTPStatus.NOT_FOUND
+
+
+class InternalServerError(HTTPException):
+    """Internal Server Error"""
+    status = HTTPStatus.INTERNAL_SERVER_ERROR
