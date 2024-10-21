@@ -1,10 +1,6 @@
 from typing import Any, Awaitable, MutableMapping, Callable, Protocol, runtime_checkable, \
     NamedTuple, Optional
 
-EMPTY_BYTES = b""
-SPACE_BYTES = b'\r\n'
-EOF_BYTES = (EMPTY_BYTES, SPACE_BYTES)
-
 
 def _getitem(self, item, default=None):
     try:

@@ -10,7 +10,7 @@ kill_event = asyncio.Event()
 async def handle_shutdown(signal_name, server_obj):
     """Signal handler for graceful shutdown."""
     logger.info(f"Received {signal_name}, shutting down...")
-    await server_obj.shutdown()
+    await asyncio.shield(server_obj.shutdown())
     kill_event.set()
 
 

@@ -1,16 +1,15 @@
-import asyncio
 import inspect
-import logging
 import pathlib
-import signal
+import ssl
 import urllib.parse as urlparse
 from asyncio import StreamReader, StreamWriter
-from logging import getLogger
 from typing import Optional
 
-from yapas.conf.constants import WORKING_DIR
+from v1.dispatcher import Dispatcher
+from yapas.core.constants import WORKING_DIR
 from yapas.core import static, exceptions
-from yapas.core.signals import kill_event, handle_shutdown, handle_restart
+from yapas.core.abs.server import BaseAsyncServer
+
 from yapas.core.types import (
     Application,
     AppFactory,
@@ -18,18 +17,33 @@ from yapas.core.types import (
     Message,
     Scope,
     EOF_BYTES,
-    SPACE_BYTES,
+    SPACE_BYTES, EMPTY_BYTES,
 )
 
 
-class Server:
+class ASGIServer(BaseAsyncServer):
     """Async Server implementation."""
 
-    def __init__(self, host: str, port: int, app: Application | AppFactory) -> None:
-        self._host = host
-        self._port = port
-
-        self._root = '/'
+    def __init__(
+        self,
+        dispatcher: Dispatcher,
+        host: Optional[str] = '0.0.0.0',
+        port: Optional[int] = 80,
+        root: Optional[str] = '/',
+        log_level: Optional[str] = 'DEBUG',
+        ssl_context: Optional[ssl.SSLContext] = None,
+        ssl_handshake_timeout: Optional[int] = None,
+        app: Optional[Application | AppFactory] = None,
+    ) -> None:
+        super().__init__(
+            dispatcher=dispatcher,
+            host=host,
+            port=port,
+            root=root,
+            log_level=log_level,
+            ssl_context=ssl_context,
+            ssl_handshake_timeout=ssl_handshake_timeout,
+        )
 
         if inspect.isfunction(app):
             # this can be if app object is a factory
@@ -38,9 +52,6 @@ class Server:
         self._app = app
         self._static_prefix = '/static'
         self._static_path: Optional[str | pathlib.Path] = WORKING_DIR / self._static_prefix
-
-        self._log: logging.Logger = getLogger('yapas.server')
-        self._server: Optional[asyncio.Server] = None
 
     def add_static_path(self, path: str | pathlib.Path) -> None:
         """Add static path to serve from"""
@@ -53,38 +64,6 @@ class Server:
             posix_path.mkdir(parents=True)
 
         self._static_path = str(posix_path)
-
-    async def _create_server(self):
-        """Create and return asyncio Server without starting it."""
-        return await asyncio.start_server(
-            self.dispatch,
-            self._host,
-            self._port,
-            start_serving=False,
-        )
-
-    async def _start(self):
-        if self._server is not None:
-            await self.shutdown()
-            self._log.info(f'Restarting...')
-
-        self._server = await self._create_server()
-        self._log.info(f'Starting TCP server on {self._host}:{self._port}')
-        await self._server.start_serving()
-
-    async def _create_listeners(self):
-        loop = asyncio.get_running_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(
-                sig,
-                lambda s=sig: asyncio.create_task(
-                    handle_shutdown(s.name, self)
-                ),
-            )
-        loop.add_signal_handler(
-            signal.SIGHUP,
-            lambda _: asyncio.create_task(handle_restart(self)),
-        )
 
     async def dispatch(self, reader: StreamReader, writer: StreamWriter) -> None:
         """Dispatch an incoming request"""
@@ -107,11 +86,12 @@ class Server:
             return await self.serve_files(writer, url.path)
 
         headers = []
-        async for data in reader:
+        reader_gen = aiter(reader)
+        async for data in reader_gen:
             if data in EOF_BYTES:
                 reader.feed_eof()
                 break
-            name, _, val = data.partition(b':')
+            name, _, val = data.strip().partition(b':')
             headers.append((name, val))
 
         scope['headers'] = headers
@@ -120,7 +100,7 @@ class Server:
 
             raw_data = bytearray()
             if not reader.at_eof():
-                raw_data += b'\r\n'
+                raw_data += SPACE_BYTES
                 raw_data += await reader.read()
 
             return Message(type="http.request", body=raw_data)
@@ -138,12 +118,13 @@ class Server:
         self._log.debug(f'received message: {message}')
         event = message.type
         if 'start' in event:
-            writer.write(b'HTTP/1.1 %d %s\r\n' % (message.status, message.get('reason', b'')))
+            writer.write(
+                b'HTTP/1.1 %d %s\r\n' % (message.status, message.get('reason', EMPTY_BYTES)))
 
             for header in message.headers:
                 writer.write(b': '.join(header))
-                writer.write(SPACE_BYTES)
-            writer.write(SPACE_BYTES)
+
+            writer.write(SPACE_BYTES * 2)
             await writer.drain()
 
         if message.body:
@@ -164,7 +145,7 @@ class Server:
         else:
             try:
                 async with static.async_open(path, mode='rb') as f:
-                    data = f.read()
+                    data = await f.read()
             except Exception as e:
                 self._log.exception(e)
                 error = exceptions.InternalServerError()
@@ -182,14 +163,3 @@ class Server:
         await writer.drain()
         writer.close()
         await writer.wait_closed()
-
-    async def start(self) -> None:
-        """Start the server and wait for the kill event."""
-        await self._start()
-        await self._create_listeners()
-        await kill_event.wait()
-
-    async def shutdown(self) -> None:
-        """Gracefully shutdown the server."""
-        self._server.close()
-        self._log.info('Server closed')

@@ -17,9 +17,12 @@ class HTTPException(DispatchException):
         """Return a bytes representation of the exception"""
         if not self.status:
             return b''
-        return (
-            b'HTTP/1.1 %d %s\r\n' % (self.status.value, self.status.name.encode())
-        )
+        return b'HTTP/1.1 %d %s\r\n' % (self.status.value, self.status.name.encode())
+
+
+class UnknownProtocolError(HTTPException):
+    """Unknown Protocol"""
+    status: HTTPStatus.HTTP_VERSION_NOT_SUPPORTED
 
 
 class MethodNotAllowed(HTTPException):

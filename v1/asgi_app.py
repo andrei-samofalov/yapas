@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 import signal
 
+
 app = FastAPI()
 
 
