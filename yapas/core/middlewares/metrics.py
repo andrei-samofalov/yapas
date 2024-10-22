@@ -25,6 +25,10 @@ class MessageMetrics:
         self._response_time = 0
         self._log = logging.getLogger('yapas.metrics')
         self._loop = asyncio.get_event_loop()
+        self._init_loop()
+
+    def _init_loop(self):
+        Thread(target=self._show_metrics, name='metrics', daemon=True).start()
 
     def _show_metrics(self):
         # todo wtf,
@@ -38,8 +42,6 @@ class MessageMetrics:
             show_metrics.clear()
 
     def __call__(self, dispatch_cb: Decorated) -> Decorated:
-        Thread(target=self._show_metrics, name='metrics', daemon=True).start()
-
         async def _decorated(_self, reader: StreamReader, writer: StreamWriter) -> CallbackResponse:
             self._counter += 1
             now = self._loop.time()
