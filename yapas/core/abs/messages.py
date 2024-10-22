@@ -89,50 +89,6 @@ class RawHttpMessage:
 
         return cls(f_line, headers=headers, body=body)
 
-    @property
-    def type(self):
-        """Return the message type."""
-        return self._info.type
-
-    @property
-    def info(self):
-        """Return the message info."""
-        return self._info
-
-    def heep_alive(self):
-        """Return True if header Connection: keep-alive in headers"""
-        return CONNECTION in self._headers and self._headers[CONNECTION] == KEEP_ALIVE
-
-    @cached_property
-    def raw_bytes(self) -> bytes:
-        """Return the raw bytes of message."""
-        buffer = bytearray()
-        buffer.extend(self._f_line)
-        buffer.extend(SPACE_BYTES)
-        for header, value in self._headers.items():
-            buffer.extend(b'%s: %s%s' % (header, value, SPACE_BYTES))
-        buffer.extend(SPACE_BYTES)
-
-        buffer.extend(self._body)
-
-        return buffer
-
-    async def _prepare_headers(self):
-        pass
-
-    async def add_header(self, header: bytes, value: bytes):
-        """Add a header to the message."""
-        self._headers[header.strip()] = value.strip()
-
-    async def remove_header(self, header_name: bytes):
-        """Remove a header from the message.
-        Does not raise KeyError if header is not presented."""
-        self._headers.pop(header_name.strip(), None)
-
-    async def update_header(self, header: bytes, value: bytes):
-        """Update a header to the message."""
-        self._headers[header.strip()] = value.strip()
-
     async def fill(self, writer: StreamWriter) -> None:
         """Fill writer with self buffer. Does NOT close the writer."""
         # head of message
@@ -148,3 +104,48 @@ class RawHttpMessage:
             writer.write(self._body)
             writer.write(EMPTY_BYTES)
             await writer.drain()
+
+    @property
+    def info(self):
+        """Return the message info."""
+        return self._info
+
+    @cached_property
+    def raw_bytes(self) -> bytes:
+        """Return the raw bytes of message."""
+        buffer = bytearray()
+        buffer.extend(self._f_line)
+        buffer.extend(SPACE_BYTES)
+        for header, value in self._headers.items():
+            buffer.extend(b'%s: %s%s' % (header, value, SPACE_BYTES))
+        buffer.extend(SPACE_BYTES)
+
+        buffer.extend(self._body)
+
+        return buffer
+
+    # header class methods
+    def heep_alive(self):
+        """Return True if header Connection: keep-alive in headers"""
+        return CONNECTION in self._headers and self._headers[CONNECTION] == KEEP_ALIVE
+
+    def add_header(self, header: bytes, value: bytes):
+        """Add a header to the message."""
+        self._headers[header.strip()] = value.strip()
+
+    def remove_header(self, header_name: bytes):
+        """Remove a header from the message.
+        Does not raise KeyError if header is not presented."""
+        self._headers.pop(header_name.strip(), None)
+
+    def update_header(self, header: bytes, value: bytes):
+        """Update a header to the message."""
+        self._headers[header.strip()] = value.strip()
+
+    def has_header(self, header_name: bytes):
+        """Return True if header exists."""
+        return header_name in self._headers
+
+    def get_header_value(self, header_name: bytes):
+        """Return value of header"""
+        return self._headers.get(header_name, EMPTY_BYTES)

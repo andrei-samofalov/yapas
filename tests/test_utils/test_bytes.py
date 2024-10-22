@@ -1,6 +1,6 @@
 import pytest
 
-from yapas.core.server.abstracts import _StatusLine, MessageType
+from yapas.core.abs.messages import _StatusLine, MessageType
 
 
 @pytest.fixture(scope='module')
@@ -20,7 +20,7 @@ def test_status_line_cls_request(request_bytes):
     assert line.method == b'GET'
     assert line.path == b'/'
     assert line.protocol == b'HTTP/1.1'
-    assert line.type is MessageType.REQUEST
+    assert line.info.type is MessageType.REQUEST
 
 
 def test_status_line_cls_response(response_bytes):
@@ -30,5 +30,5 @@ def test_status_line_cls_response(response_bytes):
     assert line.method is None
     assert line.path is None
     assert line.protocol == b'HTTP/1.1'
-    assert line.type is MessageType.RESPONSE
+    assert line.info.type is MessageType.RESPONSE
 

@@ -7,7 +7,6 @@ from abc import abstractmethod, ABC
 from asyncio import StreamReader, StreamWriter
 from typing import Optional, Any
 
-from yapas.core.abs.messages import ProxyRequest
 from yapas.core.signals import kill_event, handle_shutdown, handle_restart
 
 
