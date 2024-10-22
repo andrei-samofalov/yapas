@@ -11,7 +11,9 @@ OK = b'HTTP/1.1 200 OK'
 NOT_FOUND = b'HTTP/1.1 404 NOT_FOUND'
 INTERNAL_ERROR = b'HTTP/1.1 500 INTERNAL ERROR'
 
-
 # headers
 CONNECTION = b'Connection'
 KEEP_ALIVE = b'keep-alive'
+
+PROXY_FORWARDED_FOR = b'X-Forwarded-For'
+HOST = b'Host'

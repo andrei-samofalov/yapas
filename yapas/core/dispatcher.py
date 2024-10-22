@@ -6,6 +6,7 @@ _HANDLER_MAPPING = {
     'proxy': handlers.proxy,
     'static': handlers.static,
     'restart': handlers.restart,
+    'metrics': handlers.metrics,
 }
 
 
@@ -32,6 +33,6 @@ class ProxyDispatcher(AbstractDispatcher):
             try:
                 obj.add_location(regex, _HANDLER_MAPPING[type_])
             except KeyError:
-                raise ValueError('only "static", "restart" and "proxy" locations are supported')
+                raise ValueError(f'only {", ".join(_HANDLER_MAPPING.keys())} locations are supported')
 
         return obj

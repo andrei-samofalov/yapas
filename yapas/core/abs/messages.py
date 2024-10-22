@@ -149,3 +149,9 @@ class RawHttpMessage:
     def get_header_value(self, header_name: bytes):
         """Return value of header"""
         return self._headers.get(header_name, EMPTY_BYTES)
+
+    def __str__(self):
+        return f'{self.info.type} {self._f_line.decode().strip()}'
+
+    def __repr__(self):
+        return self._f_line.decode().strip()

@@ -4,16 +4,15 @@ from logging import getLogger
 
 from cachetools import TTLCache
 
-from yapas.core.constants import NOT_FOUND, OK, INTERNAL_ERROR
 from yapas.core.abs.messages import RawHttpMessage
 from yapas.core.client.socket import SocketClient
+from yapas.core.constants import NOT_FOUND, OK, INTERNAL_ERROR
+from yapas.core.middlewares.metrics import show_metrics
 from yapas.core.statics import async_open, render_base
 
-logger = getLogger(__name__)
+logger = getLogger('yapas.handlers')
 
 cache = TTLCache(maxsize=300, ttl=60)
-
-files = 0
 
 
 async def proxy(message: RawHttpMessage) -> RawHttpMessage:
@@ -22,64 +21,10 @@ async def proxy(message: RawHttpMessage) -> RawHttpMessage:
     return await _client.raw(message)
 
 
-# async def _proxy(message: RawHttpMessage) -> RawHttpMessage:
-#     """Handler for proxied requests"""
-#     import asyncio
-#     from yapas.conf.constants import EMPTY_BYTES, SPACE_BYTES
-#     global files
-#     files += 1
-#     reader, writer = await asyncio.open_connection('0.0.0.0', 8000)
-#
-#     print(f"request {request.raw=}")
-#     gen = request.write_gen()
-#     status = await anext(gen)
-#     writer.write(status)
-#     async for header in gen:
-#         writer.write(header)
-#         if header == SPACE_BYTES:
-#             break
-#
-#     await writer.drain()
-#
-#     async for body_line in gen:
-#         writer.write(body_line)
-#
-#     # writer.write(request.raw)
-#     await writer.drain()
-#
-#     response = bytearray()
-#
-#     try:
-#         reader_aiter = aiter(reader)
-#         f_line = await anext(reader_aiter)
-#         print(f"{f_line=}")
-#         async for chunk in reader_aiter:
-#             response.extend(chunk)
-#             if chunk == EMPTY_BYTES:
-#                 break
-#             print(f"Received chunk: {chunk}")
-#
-#     except Exception as e:
-#         print(f"Error reading response: {e}")
-#     finally:
-#         writer.close()
-#         await writer.wait_closed()
-#
-#     # resp = ProxyRequest(reader)
-#     # await resp.read()
-#     # data = bytearray()
-#     # async for line in reader:
-#     #     print(f"{line=}")
-#     #     if reader.at_eof():
-#     #         break
-#     #     data += line
-#     #
-#     # print(f'data read, sending {files}')
-#     # writer.close()
-#     # await writer.wait_closed()
-#     return response
-
-# return await client.raw(request, request.method.decode())
+async def metrics(_message: RawHttpMessage) -> RawHttpMessage:
+    """Metrics handler"""
+    show_metrics.set()
+    return RawHttpMessage(OK)
 
 
 async def static(message: RawHttpMessage) -> RawHttpMessage:
@@ -101,7 +46,9 @@ async def static(message: RawHttpMessage) -> RawHttpMessage:
 
     try:
         async with async_open(static_path) as f:
-            return RawHttpMessage(OK, body=await f.read())
+            result = RawHttpMessage(OK, body=await f.read())
+            cache[static_path] = result
+            return result
     except Exception as e:
         logger.exception(e)
         return RawHttpMessage(INTERNAL_ERROR)
