@@ -2,9 +2,8 @@ import pathlib
 import signal
 from logging import getLogger
 
-from cachetools import TTLCache
-
 from yapas.core.abs.messages import RawHttpMessage
+from yapas.core.cache.memory import TTLMemoryCache
 from yapas.core.client.socket import SocketClient
 from yapas.core.constants import NOT_FOUND, OK, INTERNAL_ERROR
 from yapas.core.middlewares.metrics import show_metrics
@@ -12,7 +11,7 @@ from yapas.core.statics import async_open, render_base
 
 logger = getLogger('yapas.handlers')
 
-cache = TTLCache(maxsize=300, ttl=60)
+cache = TTLMemoryCache(timeout=60)
 
 
 async def proxy(message: RawHttpMessage) -> RawHttpMessage:
@@ -47,7 +46,7 @@ async def static(message: RawHttpMessage) -> RawHttpMessage:
     try:
         async with async_open(static_path) as f:
             result = RawHttpMessage(OK, body=await f.read())
-            cache[static_path] = result
+            cache.set(static_path, result)
             return result
     except Exception as e:
         logger.exception(e)

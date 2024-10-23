@@ -9,8 +9,6 @@ readme = "README.md"
 python = "^3.12"
 fastapi = "^0.115.2"
 aiohttp = "^3.10.10"
-cachetools = "^5.5.0"
-
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
