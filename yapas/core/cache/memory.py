@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import threading
+from dataclasses import dataclass, field
 from typing import Any, Hashable, NamedTuple, Optional
 
 from yapas.core.abs.cache import AbstractCache
@@ -8,10 +9,11 @@ from yapas.core.abs.cache import AbstractCache
 DEFAULT_TIMEOUT = 60
 
 
-class CacheValue(NamedTuple):
+@dataclass(slots=True, eq=False)
+class CacheValue:
     """Cache value impl."""
     expires: float
-    value: Any
+    value: Any = field(compare=False)
 
 
 class TTLMemoryCache(AbstractCache):
@@ -52,7 +54,7 @@ class TTLMemoryCache(AbstractCache):
 
         self._hits += 1
         if self._update_on_get:
-            self.touch(key)
+            self._update_expiry(key)
 
         return cache_value.value
 
@@ -62,12 +64,15 @@ class TTLMemoryCache(AbstractCache):
             expires = self._timer() + self._timeout
             self._storage[key] = CacheValue(expires=expires, value=value)
 
+    def _update_expiry(self, key):
+        with self._mutex:
+            self._storage[key].expires = self._timer() + self._timeout
+
     def touch(self, key):
         """Update expiration and return boolean on success"""
         try:
-            with self._mutex:
-                self.set(key, self._storage.pop(key))
-        except KeyError:
+            self._update_expiry(key)
+        except (KeyError, AttributeError):
             return False
 
         return True

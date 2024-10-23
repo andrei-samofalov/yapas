@@ -4,9 +4,11 @@ from yapas.core.server import handlers
 
 _HANDLER_MAPPING = {
     'proxy': handlers.proxy,
-    'static': handlers.static,
+    'proxy_static': handlers.proxy_static,
+    'server_static': handlers.server_static,
     'restart': handlers.restart,
     'metrics': handlers.metrics,
+    'router': handlers.index,  # todo переделать под обработку роутером
 }
 
 

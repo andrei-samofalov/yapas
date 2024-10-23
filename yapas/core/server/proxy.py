@@ -29,11 +29,10 @@ class ProxyServer(BaseAsyncServer):
             value, *_ = message.get_header_value(b'Set-Cookie').split(b';', maxsplit=1)
             response.add_header(b'Cookie', value)
 
-
         await response.fill(writer)
 
         if not response.heep_alive():
             writer.close()
             await writer.wait_closed()
 
-        return message, response
+        return message, response  # noqa: это будет перемещено в middlewares

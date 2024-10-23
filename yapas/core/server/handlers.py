@@ -5,9 +5,9 @@ from logging import getLogger
 from yapas.core.abs.messages import RawHttpMessage
 from yapas.core.cache.memory import TTLMemoryCache
 from yapas.core.client.socket import SocketClient
-from yapas.core.constants import NOT_FOUND, OK, INTERNAL_ERROR
+from yapas.core.constants import NOT_FOUND, OK, INTERNAL_ERROR, WORKING_DIR
 from yapas.core.middlewares.metrics import show_metrics
-from yapas.core.statics import async_open, render_base
+from yapas.core.statics import async_open, render_base, render
 
 logger = getLogger('yapas.handlers')
 
@@ -26,17 +26,15 @@ async def metrics(_message: RawHttpMessage) -> RawHttpMessage:
     return RawHttpMessage(OK)
 
 
-async def static(message: RawHttpMessage) -> RawHttpMessage:
-    """Static files handler, uses TTLCache."""
+async def index(_message: RawHttpMessage) -> RawHttpMessage:
+    """Index handler"""
+    template = await render(
+        template=WORKING_DIR / 'static/templates/index.html',
+    )
+    return RawHttpMessage(OK, body=template)
 
-    # todo переписать на нормальный хендлер сервера
-    path = message.info.path.decode().removeprefix('/static')
-    static_path = f'/var/www/static/ma-tool{path}'
 
-    if "?" in static_path:
-        # versioned static files
-        static_path, *_ = static_path.split("?")
-
+async def _static(static_path) -> RawHttpMessage:
     if (result := cache.get(static_path)) is not None:
         return result
 
@@ -51,6 +49,27 @@ async def static(message: RawHttpMessage) -> RawHttpMessage:
     except Exception as e:
         logger.exception(e)
         return RawHttpMessage(INTERNAL_ERROR)
+
+
+async def proxy_static(message: RawHttpMessage) -> RawHttpMessage:
+    """Static files handler, uses TTLCache."""
+
+    # todo переписать на нормальный хендлер сервера
+    path = message.info.path.decode().removeprefix('/static')
+    static_path = f'/var/www/static/ma-tool{path}'
+
+    if "?" in static_path:
+        # versioned static files
+        static_path, *_ = static_path.split("?")
+
+    return await _static(static_path)
+
+
+async def server_static(message: RawHttpMessage) -> RawHttpMessage:
+    """Server static files handler."""
+    path = message.info.path.decode().replace('/server_static', './static')
+    static_path = WORKING_DIR / path
+    return await _static(static_path)
 
 
 async def not_found(message: RawHttpMessage) -> 'RawHttpMessage':
