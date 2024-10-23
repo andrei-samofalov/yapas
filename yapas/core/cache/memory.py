@@ -2,7 +2,7 @@ import asyncio
 import copy
 import threading
 from dataclasses import dataclass, field
-from typing import Any, Hashable, NamedTuple, Optional
+from typing import Any, Hashable, Optional
 
 from yapas.core.abs.cache import AbstractCache
 
