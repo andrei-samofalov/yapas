@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import threading
 from typing import Any, Hashable, NamedTuple, Optional
 
@@ -26,6 +27,7 @@ class TTLMemoryCache(AbstractCache):
 
         loop = asyncio.get_event_loop()
         self._timer = loop.time
+        self._last_clean = self._timer()
 
     def __str__(self):
         return f"<TTLMemoryCache hits={self._hits} misses={self._misses} length={len(self._storage)}>"
@@ -35,12 +37,14 @@ class TTLMemoryCache(AbstractCache):
 
         If key is presented but value is expired, delete key from the storage.
         """
+        self._maybe_cleanup()
 
         cache_value: Optional[CacheValue] = self._storage.get(key)
         if cache_value is None:
             self._misses += 1
             return cache_value
 
+        # this rarely can be if cleanup's self._timer() < new self._timer()
         if cache_value.expires < self._timer():
             self._misses += 1
             del self._storage[key]
@@ -67,3 +71,18 @@ class TTLMemoryCache(AbstractCache):
             return False
 
         return True
+
+    def _maybe_cleanup(self):
+        """Clean expired keys if last clean was later than configured timeout"""
+        with self._mutex:
+            now = self._timer()
+
+            if now - self._last_clean < self._timeout:
+                return
+
+            _storage = copy.deepcopy(self._storage)
+            for k, val in _storage.items():
+                if val.expires < now:
+                    del self._storage[k]
+
+            self._last_clean = now
