@@ -5,7 +5,7 @@ from yapas.conf.dispatcher import ALLOWED_METHODS
 from yapas.core.abs.enums import MessageType
 from yapas.core.abs.messages import RawHttpMessage
 from yapas.core.constants import WORKING_DIR, OK
-from yapas.core.exceptions import MethodNotAllowed
+from yapas.core.exceptions import MethodNotAllowed, HTTPException
 from yapas.core.statics import render
 
 DEFAULT_CONTEXT = {}
@@ -68,6 +68,16 @@ class TemplateHandler(AbstractHandler):
         template = await self.render_template()
         await response.add_body(template)
         return response
+
+
+class ErrorHandler(TemplateHandler):
+    error: HTTPException
+
+    async def get_context(self) -> dict:
+        return {'error_msg': self.error.status.description}
+
+    async def get(self, _request: RawHttpMessage) -> RawHttpMessage:
+        return await RawHttpMessage.from_bytes(buffer=self.error.as_bytes())
 
 
 class GetMixin:

@@ -2,12 +2,12 @@ import pathlib
 import signal
 from logging import getLogger
 
-from yapas.core.abs.handlers import AbstractHandler, TemplateHandler, GetMixin
+from yapas.core.abs.handlers import AbstractHandler, TemplateHandler, GetMixin, ErrorHandler
 from yapas.core.abs.messages import RawHttpMessage
 from yapas.core.cache.memory import TTLMemoryCache
 from yapas.core.client.socket import SocketClient
 from yapas.core.constants import OK, WORKING_DIR
-from yapas.core.exceptions import NotFoundError
+from yapas.core.exceptions import NotFoundError, InternalServerError
 from yapas.core.signals import show_metrics
 from yapas.core.statics import async_open
 
@@ -48,16 +48,14 @@ class IndexHandler(GetMixin, TemplateHandler):
     template = 'static/templates/index.html'
 
 
-class NotFoundHandler(TemplateHandler):
+class NotFoundHandler(ErrorHandler):
     """Base Not Found handler"""
+    error = NotFoundError
 
-    async def get_context(self) -> dict:
-        return {
-            "error_msg": f"Page {self._request.info.path.strip().decode()} not found on this server"
-        }
 
-    async def get(self, _request: RawHttpMessage) -> RawHttpMessage:
-        return await RawHttpMessage.from_bytes(buffer=NotFoundError.as_bytes())
+class InternalErrorHandler(ErrorHandler):
+    """Base Internal Error handler"""
+    error = InternalServerError
 
 
 async def _static(static_path) -> RawHttpMessage:

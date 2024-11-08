@@ -36,7 +36,7 @@ python -m yapas --host <host_ip> --port <port_number> --log_level <log_level>
 ### Example
 
 ```bash
-python -m yapas --host 127.0.0.1 --port 8080 --log_level info
+python -m yapas --host 127.0.0.1 --port 8080 --log_level info --use_proxy
 ```
 
 ### Parameters:
@@ -44,6 +44,8 @@ python -m yapas --host 127.0.0.1 --port 8080 --log_level info
 * `host`: IP address of the server (default: `0.0.0.0`)
 * `port`: Port to bind the server to (default: `8079`)
 * `log_level`: Logging level (`debug`, `info`, `warning`, `error`) (default: `debug`)
+* `use_proxy`: use or not pre-set reverse proxy (see `locations.ini`), 
+ensure `localhost:8000` is listened, if this parameter is set
 
 ### Error Handling
 
