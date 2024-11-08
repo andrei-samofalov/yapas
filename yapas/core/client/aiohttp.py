@@ -3,7 +3,7 @@ from aiohttp.http_writer import HttpVersion
 
 from yapas.core.abs.client import AbstractClient
 from yapas.core.abs.messages import RawHttpMessage
-from yapas.core.constants import SPACE_BYTES
+from yapas.core.constants import NEWLINE_BYTES
 
 
 def resolve_version(v: HttpVersion) -> str:
@@ -41,11 +41,11 @@ class AIOHttpClient(AbstractClient):
             print(f'{self._expand_cookie}')
             byte_header_list.append(b'Cookie: %s' % self._expand_cookie)
 
-        byte_headers = SPACE_BYTES.join(byte_header_list)
+        byte_headers = NEWLINE_BYTES.join(byte_header_list)
 
         # body
         content = await response.read()
-        return SPACE_BYTES.join((status_line, byte_headers, SPACE_BYTES, content))
+        return NEWLINE_BYTES.join((status_line, byte_headers, NEWLINE_BYTES, content))
 
     async def get_session(self):
         return aiohttp.ClientSession(base_url=self._base_url)

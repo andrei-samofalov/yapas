@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from yapas.core.abs.messages import RawHttpMessage
 
 logger = getLogger('yapas.core.client')
+DEFAULT_CLIENT_TIMEOUT = 10
 
 
 class SessionProtocol(Protocol):
@@ -25,7 +26,8 @@ class AbstractSession(ABC):
         self,
         base_url: str = '0.0.0.0:8000',
         ssl_context: Optional[ssl.SSLContext] = None,
-        loop: Optional[asyncio.AbstractEventLoop] = None
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+        timeout: Optional[float] = DEFAULT_CLIENT_TIMEOUT,
     ) -> None:
         url = urlparse(base_url)
 
@@ -35,6 +37,7 @@ class AbstractSession(ABC):
 
         self._ssl_context = ssl_context
         self._loop = loop or asyncio.get_event_loop()
+        self._timeout = timeout
 
     async def __aenter__(self) -> Self:
         await self._connect()

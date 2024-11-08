@@ -1,22 +1,19 @@
 import asyncio
 import logging
-import threading
 from threading import Thread
 from typing import Callable, Awaitable
 
 from yapas.core.abs.messages import RawHttpMessage
-from yapas.core.abs.server import BaseAsyncServer
-from yapas.core.signals import prepare_shutdown
+from yapas.core.abs.server import AbstractAsyncServer
+from yapas.core.signals import prepare_shutdown, show_metrics
 
 StreamReader = asyncio.StreamReader
 StreamWriter = asyncio.StreamWriter
 CallbackResponse = tuple[RawHttpMessage, RawHttpMessage]
 
-Decorated = Callable[[BaseAsyncServer, StreamReader, StreamWriter], Awaitable[CallbackResponse]]
-show_metrics = threading.Event()
+Decorated = Callable[[AbstractAsyncServer, StreamReader, StreamWriter], Awaitable[CallbackResponse]]
 
 
-# todo переделать на Middleware, это не работает сейчас, как нужно
 class MessageMetrics:
     """Class for logging and writing metrics"""
 
@@ -48,7 +45,7 @@ class MessageMetrics:
             req, resp = await dispatch_cb(_self, reader, writer)
             elapsed = self._loop.time() - now
 
-            _self._log.info(f'{req!r} - {resp!r}: {elapsed:.4f} ms')  # noqa
+            self._log.info(f'{req!r} - {resp!r}: {elapsed:.4f} ms')
             self._response_time += elapsed
             return req, resp
 

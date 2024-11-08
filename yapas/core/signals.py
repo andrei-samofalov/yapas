@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 from logging import getLogger
 
@@ -6,6 +7,7 @@ logger = getLogger(__name__)
 
 kill_event = asyncio.Event()
 prepare_shutdown = asyncio.Event()
+show_metrics = threading.Event()
 
 
 async def handle_shutdown(signal_name, server_obj):

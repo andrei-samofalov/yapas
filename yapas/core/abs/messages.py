@@ -3,7 +3,8 @@ from functools import cached_property
 from typing import Optional, NamedTuple
 
 from yapas.core.abs.enums import MessageType
-from yapas.core.constants import SPACE_BYTES, EMPTY_BYTES, CONNECTION, KEEP_ALIVE
+from yapas.core.constants import NEWLINE_BYTES, EMPTY_BYTES, CONNECTION, KEEP_ALIVE
+from yapas.core.exceptions import UnknownProtocolError
 
 
 class _StatusLine(NamedTuple):
@@ -21,6 +22,9 @@ class _StatusLine(NamedTuple):
         Req: b'GET / HTTP/1.1'
         Resp: b'HTTP/1.1 200 OK'
         """
+        if not b"HTTP" in b:
+            raise UnknownProtocolError()
+
         parts: list[bytes] = b.strip().split(maxsplit=2)
         assert len(parts) == 3, parts
         is_resp = parts[0].startswith(b"HTTP/1.")
@@ -45,7 +49,7 @@ class RawHttpMessage:
         f_line: bytes,
         *,
         headers: Optional[list[list[bytes]]] = None,
-        body: Optional[bytes] = EMPTY_BYTES
+        body: Optional[bytes] = EMPTY_BYTES,
     ) -> None:
         self._f_line = f_line
         self._info = _StatusLine.from_bytes(self._f_line)
@@ -54,10 +58,15 @@ class RawHttpMessage:
         self._headers = {name.strip(): val.strip() for name, val in headers} if headers else {}
         self._body = body
 
+    @property
+    def info(self) -> _StatusLine:
+        """Return the message info."""
+        return self._info
+
     @classmethod
     async def from_bytes(cls, buffer: bytes):
         """Create a Message from bytes"""
-        parts = buffer.split(SPACE_BYTES)
+        parts = buffer.split(NEWLINE_BYTES)
         f_line, parts = parts[0], parts[1:]
 
         headers = []
@@ -66,7 +75,9 @@ class RawHttpMessage:
             if chunk == EMPTY_BYTES:
                 body = b''.join(parts[index:])
                 break
-            headers.append(chunk.strip(b'\r\n').split(b':', maxsplit=1))
+            header = chunk.strip(NEWLINE_BYTES).split(b':', maxsplit=1)
+            if len(header) == 2:
+                headers.append(header)
 
         return cls(f_line, headers=headers, body=body)
 
@@ -74,13 +85,19 @@ class RawHttpMessage:
     async def from_reader(cls, reader: StreamReader) -> 'RawHttpMessage':
         """Create a Message from a StreamReader buffer"""
         reader_gen = aiter(reader)
-        f_line = await anext(reader_gen)
+        try:
+            f_line = await anext(reader_gen)
+        except StopAsyncIteration:
+            return cls(EMPTY_BYTES)
+
         headers = []
         async for chunk in reader_gen:
-            if chunk == SPACE_BYTES:
+            if chunk == NEWLINE_BYTES:
                 reader.feed_eof()
                 break
-            headers.append(chunk.strip(b'\r\n').split(b':', maxsplit=1))
+            header = chunk.strip(NEWLINE_BYTES).split(b':', maxsplit=1)
+            if len(header) == 2:
+                headers.append(header)
 
         body = b''
         if not reader.at_eof():
@@ -89,38 +106,44 @@ class RawHttpMessage:
 
         return cls(f_line, headers=headers, body=body)
 
+    async def add_body(self, body: bytes):
+        """Add a body to the message"""
+        self._body += body
+
     async def fill(self, writer: StreamWriter) -> None:
         """Fill writer with self buffer. Does NOT close the writer."""
-        # head of message
-        writer.write(b'%s%s' % (self._f_line, SPACE_BYTES))
+        # head of the message
+        writer.write(b'%s%s' % (self._f_line, NEWLINE_BYTES))
         for header, value in self._headers.items():
-            writer.write(b'%s: %s%s' % (header, value, SPACE_BYTES))
-        writer.write(SPACE_BYTES)
+            writer.write(b'%s: %s%s' % (header, value, NEWLINE_BYTES))
+        writer.write(NEWLINE_BYTES)
 
         await writer.drain()
 
         # body
         if self._body:
             writer.write(self._body)
-            writer.write(EMPTY_BYTES)
             await writer.drain()
 
-    @property
-    def info(self):
-        """Return the message info."""
-        return self._info
+        # finishing response
+        writer.write(NEWLINE_BYTES)
+        await writer.drain()
+
+        writer.write(EMPTY_BYTES)
+        await writer.drain()
 
     @cached_property
     def raw_bytes(self) -> bytes:
         """Return the raw bytes of message."""
         buffer = bytearray()
         buffer.extend(self._f_line)
-        buffer.extend(SPACE_BYTES)
+        buffer.extend(NEWLINE_BYTES)
         for header, value in self._headers.items():
-            buffer.extend(b'%s: %s%s' % (header, value, SPACE_BYTES))
-        buffer.extend(SPACE_BYTES)
+            buffer.extend(b'%s: %s%s' % (header, value, NEWLINE_BYTES))
+        buffer.extend(NEWLINE_BYTES)
 
         buffer.extend(self._body)
+        buffer.extend(NEWLINE_BYTES)
 
         return buffer
 

@@ -2,36 +2,62 @@ import pathlib
 import signal
 from logging import getLogger
 
+from yapas.core.abs.handlers import AbstractHandler, TemplateHandler, GetMixin
 from yapas.core.abs.messages import RawHttpMessage
 from yapas.core.cache.memory import TTLMemoryCache
 from yapas.core.client.socket import SocketClient
-from yapas.core.constants import NOT_FOUND, OK, INTERNAL_ERROR, WORKING_DIR
-from yapas.core.middlewares.metrics import show_metrics
-from yapas.core.statics import async_open, render_base, render
+from yapas.core.constants import OK, WORKING_DIR
+from yapas.core.exceptions import NotFoundError
+from yapas.core.signals import show_metrics
+from yapas.core.statics import async_open
 
 logger = getLogger('yapas.handlers')
-
 cache = TTLMemoryCache(timeout=60)
 
 
-async def proxy(message: RawHttpMessage) -> RawHttpMessage:
-    """Proxy handler"""
-    _client = SocketClient()
-    return await _client.raw(message)
+class ProxyHandler(AbstractHandler):
+    """Proxy handler for all requests"""
+
+    async def dispatch(self, message: RawHttpMessage) -> RawHttpMessage:
+        """Proxy handler, ignores ALLOWED METHODS"""
+        _client = SocketClient()
+        return await _client.raw(message)
 
 
-async def metrics(_message: RawHttpMessage) -> RawHttpMessage:
-    """Metrics handler"""
-    show_metrics.set()
-    return RawHttpMessage(OK)
+class RestartHandler(TemplateHandler):
+    """Restart handler. Restarts the server."""
+
+    async def get_context(self) -> dict:
+        return {"error_msg": "Restarting..."}
+
+    async def get(self, _message: RawHttpMessage):
+        signal.raise_signal(signal.SIGHUP)
+        return RawHttpMessage(OK)
 
 
-async def index(_message: RawHttpMessage) -> RawHttpMessage:
-    """Index handler"""
-    template = await render(
-        template=WORKING_DIR / 'static/templates/index.html',
-    )
-    return RawHttpMessage(OK, body=template)
+class MetricsHandler(AbstractHandler):
+    """Metrics handler. Shows statistics in stdout."""
+
+    async def get(self, _request: RawHttpMessage) -> RawHttpMessage:
+        show_metrics.set()
+        return RawHttpMessage(OK)
+
+
+class IndexHandler(GetMixin, TemplateHandler):
+    """Index template handler"""
+    template = 'static/templates/index.html'
+
+
+class NotFoundHandler(TemplateHandler):
+    """Base Not Found handler"""
+
+    async def get_context(self) -> dict:
+        return {
+            "error_msg": f"Page {self._request.info.path.strip().decode()} not found on this server"
+        }
+
+    async def get(self, _request: RawHttpMessage) -> RawHttpMessage:
+        return await RawHttpMessage.from_bytes(buffer=NotFoundError.as_bytes())
 
 
 async def _static(static_path) -> RawHttpMessage:
@@ -39,16 +65,12 @@ async def _static(static_path) -> RawHttpMessage:
         return result
 
     if not pathlib.Path(static_path).exists():
-        return RawHttpMessage(NOT_FOUND)  # todo abs
+        raise NotFoundError()
 
-    try:
-        async with async_open(static_path) as f:
-            result = RawHttpMessage(OK, body=await f.read())
-            cache.set(static_path, result)
-            return result
-    except Exception as e:
-        logger.exception(e)
-        return RawHttpMessage(INTERNAL_ERROR)
+    async with async_open(static_path) as f:
+        result = RawHttpMessage(OK, body=await f.read())
+        cache.set(static_path, result)
+        return result
 
 
 async def proxy_static(message: RawHttpMessage) -> RawHttpMessage:
@@ -70,18 +92,3 @@ async def server_static(message: RawHttpMessage) -> RawHttpMessage:
     path = message.info.path.decode().replace('/server_static', './static')
     static_path = WORKING_DIR / path
     return await _static(static_path)
-
-
-async def not_found(message: RawHttpMessage) -> 'RawHttpMessage':
-    """Not found handler"""
-    template = await render_base(
-        error_msg=f"Page {message.info.path.strip().decode()} not found on this server"
-    )
-    return RawHttpMessage(OK, body=template)
-
-
-async def restart(_message: RawHttpMessage):
-    """Restart handler"""
-    signal.raise_signal(signal.SIGHUP)
-    template = await render_base(error_msg=f"Restarting...")
-    return RawHttpMessage(OK, body=template)

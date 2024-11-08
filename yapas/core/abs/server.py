@@ -5,20 +5,20 @@ import signal
 import ssl
 from abc import abstractmethod, ABC
 from asyncio import StreamReader, StreamWriter
-from typing import Optional, Any
+from typing import Optional
 
+from yapas.core.abs.dispatcher import AbstractDispatcher
 from yapas.core.signals import kill_event, handle_shutdown, handle_restart
 
 
-class BaseAsyncServer(ABC):
+class AbstractAsyncServer(ABC):
     """Async Server implementation."""
 
     def __init__(
         self,
-        dispatcher: Any,
+        dispatcher: AbstractDispatcher,
         host: Optional[str] = '0.0.0.0',
-        port: Optional[int] = 80,
-        root: Optional[str] = './',
+        port: Optional[int] = 8070,
         log_level: Optional[str] = 'DEBUG',
         ssl_context: Optional[ssl.SSLContext] = None,
         ssl_handshake_timeout: Optional[int] = None,
@@ -27,7 +27,6 @@ class BaseAsyncServer(ABC):
         :param dispatcher: a Dispatcher instance with configured locations
         :param host: host to bind to
         :param port: port to bind to
-        :param root: path to root directory  ## should be replaced by Dispatcher location conf
         :param log_level: logging level, it would be passed to server logger directly
         :param ssl_context: SSL context to use, defaults to None
         :param port: port listen to, defaults to 80
@@ -37,7 +36,6 @@ class BaseAsyncServer(ABC):
         self._port = port
         self._ssl_context = ssl_context
         self._ssl_handshake_timeout = ssl_handshake_timeout
-        self._root = root
 
         self._log: logging.Logger = logging.getLogger('yapas.server')
         self._log.setLevel(log_level.upper())
@@ -92,7 +90,6 @@ class BaseAsyncServer(ABC):
         await self._start()
         await self._create_listeners()
         await kill_event.wait()
-        await self.shutdown()
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the server."""

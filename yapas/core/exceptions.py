@@ -13,11 +13,12 @@ class HTTPException(DispatchException):
     """HTTP Exception"""
     status: HTTPStatus
 
-    def as_bytes(self):
+    @classmethod
+    def as_bytes(cls):
         """Return a bytes representation of the exception"""
-        if not self.status:
+        if not cls.status:
             return b''
-        return b'HTTP/1.1 %d %s\r\n' % (self.status.value, self.status.name.encode())
+        return b'HTTP/1.1 %d %s' % (cls.status.value, cls.status.phrase.encode())
 
 
 class UnknownProtocolError(HTTPException):

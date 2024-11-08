@@ -6,22 +6,24 @@ from asyncio import StreamReader, StreamWriter
 from typing import Optional
 
 from v1.dispatcher import Dispatcher
-from yapas.core.constants import WORKING_DIR
-from yapas.core import static, exceptions
-from yapas.core.abs.server import BaseAsyncServer
-
-from yapas.core.types import (
+from v1.types import (
     Application,
     AppFactory,
     ASGIMessage,
     Message,
     Scope,
-    EOF_BYTES,
-    SPACE_BYTES, EMPTY_BYTES,
 )
+from yapas.core import exceptions
+from yapas.core.abs.server import AbstractAsyncServer
+from yapas.core.constants import (
+
+    EOF_BYTES,
+    NEWLINE_BYTES, EMPTY_BYTES, OK,
+)
+from yapas.core.constants import WORKING_DIR
 
 
-class ASGIServer(BaseAsyncServer):
+class ASGIServer(AbstractAsyncServer):
     """Async Server implementation."""
 
     def __init__(
@@ -39,7 +41,6 @@ class ASGIServer(BaseAsyncServer):
             dispatcher=dispatcher,
             host=host,
             port=port,
-            root=root,
             log_level=log_level,
             ssl_context=ssl_context,
             ssl_handshake_timeout=ssl_handshake_timeout,
@@ -100,7 +101,7 @@ class ASGIServer(BaseAsyncServer):
 
             raw_data = bytearray()
             if not reader.at_eof():
-                raw_data += SPACE_BYTES
+                raw_data += NEWLINE_BYTES
                 raw_data += await reader.read()
 
             return Message(type="http.request", body=raw_data)
@@ -124,7 +125,7 @@ class ASGIServer(BaseAsyncServer):
             for header in message.headers:
                 writer.write(b': '.join(header))
 
-            writer.write(SPACE_BYTES * 2)
+            writer.write(NEWLINE_BYTES * 2)
             await writer.drain()
 
         if message.body:
@@ -152,12 +153,12 @@ class ASGIServer(BaseAsyncServer):
 
         if error:
             writer.write(error.as_bytes())
-            writer.write(SPACE_BYTES)  # <- instead of headers
-            writer.write(SPACE_BYTES)
+            writer.write(NEWLINE_BYTES)  # <- instead of headers
+            writer.write(NEWLINE_BYTES)
         else:
-            writer.write(b'HTTP/1.1 200 OK')
-            writer.write(SPACE_BYTES)  # <- instead of headers
-            writer.write(SPACE_BYTES)
+            writer.write(OK)
+            writer.write(NEWLINE_BYTES)  # <- instead of headers
+            writer.write(NEWLINE_BYTES)
             writer.write(data)
 
         await writer.drain()

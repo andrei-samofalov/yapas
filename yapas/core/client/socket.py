@@ -42,7 +42,7 @@ class SocketSession(AbstractSession):
 
         response = EMPTY_BYTES
         while True:
-            data = await self._loop.sock_recv(conn, 1024)
+            data = await self._loop.sock_recv(conn, 4096)
             response += data
             if data == EMPTY_BYTES:
                 break

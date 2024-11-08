@@ -1,13 +1,12 @@
 from abc import abstractmethod, ABC
-from typing import Callable, Awaitable
 from typing import Self
 
 from yapas.conf.parser import ConfParser
-from yapas.core.abs.messages import RawHttpMessage
+from yapas.core.abs.handlers import HandlerCallable
 from yapas.core.constants import EMPTY_BYTES
 from yapas.core.server import handlers
 
-ProxyHandler = Callable[[RawHttpMessage], Awaitable[RawHttpMessage]]
+NOT_FOUND_HANDLE = handlers.NotFoundHandler.as_view()
 
 
 class AbstractDispatcher(ABC):
@@ -15,28 +14,32 @@ class AbstractDispatcher(ABC):
 
     def __init__(self):
         # like nginx locations
-        self._locations: dict[bytes, ProxyHandler] = {}
+        self._locations: dict[bytes, HandlerCallable] = {}
 
     @classmethod
     @abstractmethod
     def from_conf(cls, conf: ConfParser) -> Self:
         """Create a Dispatcher instance from a configuration file."""
 
-    def add_location(self, path: str, handler: ProxyHandler):
+    def add_location(self, path: str, handler: HandlerCallable):
         """Add location to listen and proxy pass to"""
         if not path.startswith('/'):
             path = f"/{path}"
         self._locations[path.encode()] = handler
 
-    async def get_handler(self, path: bytes) -> ProxyHandler:
+    async def get_handler(self, path: bytes) -> HandlerCallable:
         """Find handler for particular request path"""
+
         if path == EMPTY_BYTES:
-            return handlers.not_found
+            return NOT_FOUND_HANDLE
 
         assert path.startswith(b'/'), path
 
         for loc, handler in self._locations.items():
-            if path.startswith(loc):
+            if path == loc:
                 return handler
 
-        return handlers.not_found
+            elif loc.endswith(b'*') and path.startswith(loc.removesuffix(b'*')):
+                return handler
+
+        return NOT_FOUND_HANDLE
