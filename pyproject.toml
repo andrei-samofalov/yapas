@@ -1,17 +1,17 @@
 [tool.poetry]
-name = "async-server"
+name = "yapas"
 version = "0.1.0"
-description = ""
+description = "Yet another Python async server"
 authors = ["andrei-samofalov <andrei.e.samofalov@gmail.com>"]
-readme = "README.md"
+readme = "Readme.md"
+license = 'MIT'
 
 [tool.poetry.dependencies]
 python = "^3.12"
-fastapi = "^0.115.2"
-aiohttp = "^3.10.10"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.3"
+twine = "^5.1.1"
 
 [build-system]
 requires = ["poetry-core"]
