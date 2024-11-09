@@ -1,49 +1,29 @@
 import argparse
 import asyncio
-from typing import NoReturn, Optional
 
-from yapas import Dispatcher, Router, Server
 from yapas import conf
-from yapas.app.routes import TestRoute, SecondTestRoute, RestartRoute
+from yapas.conf.parser import ConfParser
+from yapas.core.constants import WORKING_DIR
+from yapas.core.dispatcher import ProxyDispatcher
+from yapas.core.server.proxy import ProxyServer
 from yapas.core.signals import kill_event
 
 
-async def main(
-    *,
-    host: str = '0.0.0.0',
-    port: int = 8079,
-    static_path: Optional[str] = None,
-    log_level: Optional[str] = 'debug',
-) -> NoReturn:
-    """Start async server with configured params:
+async def main(host='0.0.0.0', port=8079, log_level='debug', use_proxy=False):
+    server_conf = ConfParser(WORKING_DIR)
+    dispatcher = ProxyDispatcher.from_conf(server_conf)
 
-    :param host: IP address of the server
-    :param port: Port of the server
-    :param static_path: Path to the static folder
-    :param log_level: Logging level
-    """
+    # just for testing
+    if use_proxy is False:
+        del dispatcher._locations[b'/*']
+
     conf.setup_logging(log_level.upper())
-
-    dispatcher = Dispatcher()
-    root = Router()
-    dispatcher.register_root(root)
-
-    first_route = TestRoute()
-    second_route = SecondTestRoute()
-    # third_route = TestRoute()
-    restart_route = RestartRoute()
-
-    root.register_router('/testme', first_route)  # get/post
-    root.register_router('/test', second_route)  # internal server error
-    root.register_router('/restart', restart_route)  # sending SIGHUP signal
-    # root.register_router('/test', third_route)  # test exception on startup
-
-    await dispatcher.perform_checks()
-
-    server = Server(host=host, port=port, client_connection_cb=dispatcher.root_handler)
-    if static_path:
-        server.add_static_path(static_path)
-
+    server = ProxyServer(
+        dispatcher=dispatcher,
+        host=host,
+        port=port,
+        log_level=log_level
+    )
     await server.start()
 
 
@@ -53,15 +33,15 @@ if __name__ == '__main__':
                         type=str, help='IP address of the server')
     parser.add_argument('--port', default=8079,
                         type=int, help='Port of the server')
-    parser.add_argument('--static_path', default='./static',
-                        type=str, help='Path to the static folder')
     parser.add_argument('--log_level', default='debug',
                         choices=['debug', 'info', 'warning', 'error'],
                         type=str, help='Logging level')
-
+    parser.add_argument('--use_proxy',
+                        action='store_true',
+                        help='Whether to use proxy server')
     args: argparse.Namespace = parser.parse_args()
 
     try:
-        asyncio.run(main(**args.__dict__))  # noqa
-    except KeyboardInterrupt:
+        asyncio.run(main(**args.__dict__))
+    except (KeyboardInterrupt, asyncio.CancelledError):
         kill_event.set()

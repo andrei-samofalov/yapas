@@ -1,169 +1,42 @@
-import logging
-import urllib.parse as urlparse
-from asyncio import StreamReader, StreamWriter
-from http import HTTPMethod, HTTPStatus
-from typing import Optional
-from urllib.parse import ParseResult
+from yapas.conf.parser import ConfParser
+from yapas.core.abs.dispatcher import AbstractDispatcher
+from yapas.core.abs.handlers import HandlerCallable
+from yapas.core.server import handlers
 
-from yapas.core import exceptions, static
-from yapas.core.exceptions import ImproperlyConfigured
-from yapas.core.request import make_request, Request
-from yapas.core.response import Response
-
-EMPTY_BYTES = b""
-SPACE_BYTES = b'\r\n'
-EOF_STRINGS = (EMPTY_BYTES, SPACE_BYTES)
+_HANDLER_MAPPING: dict[str, HandlerCallable] = {
+    'proxy': handlers.ProxyHandler.as_view(),
+    'proxy_static': handlers.proxy_static,
+    'server_static': handlers.server_static,
+    'restart': handlers.RestartHandler.as_view(),
+    'metrics': handlers.MetricsHandler.as_view(),
+    'router': handlers.IndexHandler.as_view(),  # todo переделать под обработку роутером
+}
 
 
-class Router:
-    """Simple router implementation"""
-
-    def __init__(self) -> None:
-        self._path: Optional[str] = None
-        self._parent: Optional["Router"] = None
-        self._children: list['Router'] = []
-
-    def register_router(self, path: str, router: "Router") -> None:
-        """Register router as a child router"""
-        if not self._parent:
-            raise ImproperlyConfigured('You must register a root router')
-
-        self._parent.register_router(path, router)
-        self._children.append(router)
-        router.register(self, path)
-
-    def register(self, parent, self_path):
-        """Register self to a route path"""
-        self._path = self_path
-        self._parent = parent
-
-    def search_router(self, url: ParseResult):
-        """Search a particular router for handling request by its path"""
-        if self._path == url.path:
-            return self
-
-        for router in self._children:
-            if router.search_router(url):
-                return router
-
-        return None
-
-    def can_handle(self, method: HTTPMethod):
-        """Return True if router can handle request, False otherwise"""
-        return hasattr(self, method.lower())
-
-    async def dispatch(self, request: Request) -> Response:
-        """Dispatch request to handler"""
-        router = self.search_router(request.url)
-        if not router:
-            raise exceptions.NotFoundError(request.url.path)
-
-        if not router.can_handle(request.method):
-            raise exceptions.MethodNotAllowed(request.method.name)
-
-        handler = getattr(router, request.method.lower())
-        return await handler(request)
-
-
-class Dispatcher:
-    """Dispatcher class for handle and routing requests"""
-
-    def __init__(self) -> None:
-        self._methods = ('GET', 'POST')
-        self._log: logging.Logger = logging.getLogger("yapas.dispatcher")
-        self.root_router: Optional[Router] = None
-        self._routes: dict[str, Router] = {}
-
-    def register_router(self, path: str, router: "Router"):
-        """Register a router to route mapping"""
-        if path in self._routes:
-            raise exceptions.ImproperlyConfigured(f"{path} is already registered")
-
-        self._routes[path] = router
-
-    def register_root(self, router: "Router") -> None:
-        """Register a router as a root router"""
-        self.root_router = router
-        router.register(self, '/')
-
-    async def root_handler(self, reader: StreamReader, writer: StreamWriter):
-        """Root handler for all requests"""
-
-        try:
-            if (request := await self._initialize_request(reader)) is None:
-                return
-            response = await self._dispatch(request)
-        except Exception as e:
-            response = await self._handle_exception(e)
-
-        await self._write_response(writer, response)
-
-    async def _initialize_request(self, reader: StreamReader):
-        """Initialize request: parse protocol, path, method, headers and data,
-        create and return a Request object."""
-
-        if (first_line := await reader.readline()) in EOF_STRINGS:
-            return
-
-        method, path, protocol = first_line.decode().strip().split(' ')
-
-        # we don't want to read request we can not handle
-        if path not in self._routes:
-            raise exceptions.NotFoundError(path)
-
-        raw_data = bytearray()
-        async for data in reader:
-            if data in EOF_STRINGS:
-                reader.feed_eof()
-                break
-            raw_data += data
-
-        if not reader.at_eof():
-            raw_data += b'\r\n'
-            raw_data += await reader.read()
-
-        url = urlparse.urlparse(path)
-        return make_request(method, url, raw_data)
+class ProxyDispatcher(AbstractDispatcher):
 
     @classmethod
-    async def _write_response(cls, writer: StreamWriter, response: Response):
-        """Write the Response to the Transport buffer and drain it."""
+    def from_conf(cls, conf: ConfParser) -> "ProxyDispatcher":
+        """Create a Dispatcher instance from a configuration file."""
+        settings = conf.parse()
+        obj = cls()
 
-        writer.write(response.status_bytes())  # HTTP/1.1 200 OK
-        for header in response.headers_bytes():
-            writer.write(header)
-        writer.write(SPACE_BYTES)
+        locations = {}
+        for section in settings.sections():
+            if not section.startswith('locations'):
+                continue
 
-        if response.body:
-            writer.write(response.body_bytes())
-            writer.write(SPACE_BYTES)
+            _, name = section.split(':')
+            locations[name] = None  # for now
 
-        await writer.drain()
-        writer.close()
-        await writer.wait_closed()
+            loc_info = settings[section]
+            regex = loc_info.get('regex')
+            type_ = loc_info.get('type')
 
-    async def _dispatch(self, request: Request) -> Response:
-        """Handle request"""
-        try:
-            return await self.root_router.dispatch(request)
-        except Exception as exception:
-            return await self._handle_exception(exception)
+            try:
+                obj.add_location(regex, _HANDLER_MAPPING[type_])
+            except KeyError:
+                raise ValueError(
+                    f'only {", ".join(_HANDLER_MAPPING.keys())} locations are supported')
 
-    async def _handle_exception(self, exc: Exception) -> Response:
-        if not isinstance(exc, exceptions.HTTPException):
-            return await self._unhandled(exc)
-
-        self._log.warning(f"{exc.args[0]}: {exc.status} {exc.status.name}")
-        body = ''
-        if exc.status in [HTTPStatus.INTERNAL_SERVER_ERROR, HTTPStatus.NOT_FOUND]:
-            body = await static.render_base(error_msg=exc.status.name)
-        return Response(status=exc.status, body=body)
-
-    async def _unhandled(self, exc: Exception) -> Response:
-        self._log.exception(exc)
-        return Response(status=HTTPStatus.INTERNAL_SERVER_ERROR)
-
-    async def perform_checks(self):
-        """Perform checks on the startup"""
-        if not self.root_router:
-            raise exceptions.ImproperlyConfigured("You must register the root router")
+        return obj
