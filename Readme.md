@@ -47,6 +47,11 @@ python -m yapas --host 127.0.0.1 --port 8080 --log_level info --use_proxy
 * `use_proxy`: use or not pre-set reverse proxy (see `locations.ini`), 
 ensure `localhost:8000` is listened, if this parameter is set
 
+### Default endpoints
+* /index - static page
+* /metrics - shows some metrics info in terminal
+* /restart - restarts the server 
+
 ### Error Handling
 
 The server supports custom error handling for common HTTP errors:
