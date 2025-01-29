@@ -4,7 +4,7 @@ from logging import getLogger
 
 from yapas.core.abs.handlers import AbstractHandler, TemplateHandler, GetMixin, ErrorHandler
 from yapas.core.abs.messages import RawHttpMessage
-from yapas.core.cache.memory import TTLMemoryCache
+from yapas.core.cache.memory import cache
 from yapas.core.client.socket import SocketClient
 from yapas.core.constants import OK, WORKING_DIR
 from yapas.core.exceptions import NotFoundError, InternalServerError
@@ -12,7 +12,6 @@ from yapas.core.signals import show_metrics
 from yapas.core.statics import async_open
 
 logger = getLogger('yapas.handlers')
-cache = TTLMemoryCache(timeout=60)
 
 
 class ProxyHandler(AbstractHandler):
@@ -59,7 +58,7 @@ class InternalErrorHandler(ErrorHandler):
 
 
 async def _static(static_path) -> RawHttpMessage:
-    if (result := cache.get(static_path)) is not None:
+    if (result := await cache.get(static_path)) is not None:
         return result
 
     if not pathlib.Path(static_path).exists():
@@ -67,7 +66,7 @@ async def _static(static_path) -> RawHttpMessage:
 
     async with async_open(static_path) as f:
         result = RawHttpMessage(OK, body=await f.read())
-        cache.set(static_path, result)
+        await cache.set(static_path, result)
         return result
 
 
